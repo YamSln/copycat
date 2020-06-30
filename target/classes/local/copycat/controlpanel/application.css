@@ -1,0 +1,43 @@
+/* JavaFX CSS - Leave this comment until you have at least create one rule which uses -fx-Property */
+
+.button
+{
+	-fx-font-size: 14pt;
+	-fx-alignment: center;
+	-fx-focus-color: transparent;
+	-fx-faint-focus-color: transparent;
+}
+
+.title-label
+{
+	-fx-font-size: 18pt;
+	-fx-font-family: "Comic Sans MS", cursive, sans-serif;
+	-fx-font-weight: bold;
+	-fx-alignment: center;
+}
+
+.main-label
+{
+	-fx-font-size: 14pt;
+	-fx-font-family: arial;
+	-fx-font-weight: bold;
+}
+
+.text-field
+{
+	-fx-font-size: 14pt;
+	-fx-font-family: arial;
+}
+
+.combo-box
+{
+	-fx-font-size: 14pt;
+	-fx-font-family: arial;
+}
+
+.menu-bar
+{
+	-fx-font-size: 12pt;
+	-fx-font-family: arial;
+	-fx-font-weight: normal;
+}
