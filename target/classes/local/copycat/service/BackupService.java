@@ -23,6 +23,9 @@ public class BackupService
 {
 	private ArrayList<BackupListener> backupListeners = new ArrayList<BackupListener>();
 	
+	private ArrayList<File> sources;
+	private File destination;
+	
 	// The service thread of the backup service
 	private static Thread serviceThread = null;
 	
@@ -89,11 +92,11 @@ public class BackupService
 	 * @param destionation destination directory to copy into
 	 * @return {@code true} if the service started successfully, otherwise returns {@code false}
 	 */
-	public boolean startService(File source, File destionation)
+	public boolean startService()
 	{
-		if(source != null && destionation != null)
+		if(this.sources != null && this.destination != null && sleepTime > 0)
 		{
-			if(source.exists() && source.exists())
+			if(this.destination.exists() && checkSources(sources))
 			{
 				serviceThread = new Thread(new Runnable() 
 				{
@@ -105,29 +108,34 @@ public class BackupService
 						{	
 							while(!Thread.currentThread().isInterrupted())
 							{
-								System.out.println(sleepTime);
-								if(copyUserDirectory(source, destionation))
+								for(File source : sources)
 								{
-									threadStatusChanged(true);
-									Thread.sleep(sleepTime);
-								}
-								else
-								{
-									Platform.runLater(new Runnable() {
-										
-										@Override
-										public void run() {
-											Platform.setImplicitExit(false);
-											threadStatusChanged(false);
-											ControlPanelController.setBackuping(false);
-											stopService();
-											Messages.error("Source or destination could not be found", "File error");
+									if(copyUserDirectory(source, destination))
+										threadStatusChanged(true);
+									else
+									{
+										Platform.runLater(new Runnable() {
 											
-										}
-									});
-									
-									break;
+											@Override
+											public void run() {
+												Platform.setImplicitExit(false);
+												threadStatusChanged(false);
+												ControlPanelController.setBackuping(false);
+												if(!destination.exists())
+													Messages.error("Destination could not be found", "File error");
+												else
+													Messages.error("Source: " + source.getAbsolutePath() + " does not exist", "File error");
+												stopService();
+											}
+										});
+										
+										break;
+									}
+								
 								}
+								
+								System.out.println(sleepTime);			
+								Thread.sleep(sleepTime);
 							}
 						}
 						catch(InterruptedException e)
@@ -166,6 +174,36 @@ public class BackupService
 		serviceThread = null;
 	}
 	
+	public ArrayList<File> getSources() 
+	{
+		return this.sources;
+	}
+
+	public void setSources(ArrayList<File> sources) 
+	{
+		this.sources = sources;
+	}
+
+	public File getDestination() 
+	{
+		return this.destination;
+	}
+
+	public void setDestination(File destination) 
+	{
+		this.destination = destination;
+	}
+	
+	public void addSource(File source)
+	{
+		this.sources.add(source);
+	}
+	
+	public boolean removeSource(File source)
+	{
+		return this.sources.remove(source);
+	}
+	
 	/**
 	 * Sets the sleep time of the service thread
 	 * 
@@ -196,5 +234,20 @@ public class BackupService
 		for(BackupListener bl : backupListeners)
 			bl.statusChanged(threadIsRunning);
 	}
+	
+	private boolean checkSources(ArrayList<File> sources)
+	{
+		if(sources.isEmpty())
+			return false;
+		
+		for(File source : sources)
+		{
+			if(!source.exists())
+				return false;
+		}
+
+		return true;
+	}
+	
 	
 }

@@ -1,11 +1,13 @@
 package local.copycat.controlpanel;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
@@ -19,7 +21,10 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
 import javafx.scene.control.Alert.AlertType;
 import javafx.stage.DirectoryChooser;
@@ -47,6 +52,7 @@ public class ControlPanelController implements Initializable, BackupListener
 	private static final String HALF_AN_HOUR = "00:30 Minutes";
 	private static final String[] TIME_OPTIONS = {THREE_HOURS, TWO_HOURS, ONE_HOUR, HALF_AN_HOUR};
 	private static ObservableList<String> timeOptions = FXCollections.observableArrayList();
+	private static ObservableList<File> sourcePaths = FXCollections.observableArrayList();
 	private static String selectedTimeOption;
 	
 	private static final String ICON_RESOURCE = "/Images/Tray_Icon.png";
@@ -72,7 +78,10 @@ public class ControlPanelController implements Initializable, BackupListener
 	private static boolean running;
 	
 	@FXML
-	private Button sourceBrowseButton;
+	private Button sourceAddButton;
+	
+	@FXML
+	private Button sourceRemoveButton;
 	
 	@FXML
 	private Button destinationBrowseButton;
@@ -84,7 +93,10 @@ public class ControlPanelController implements Initializable, BackupListener
 	private Button stopBackupButton;
 	
 	@FXML
-	private TextField sourcePathTextField;
+	private TableView<File> sourcePathsTable;
+	
+	@FXML
+	private TableColumn<File, String> sourcePathsColumn;
 	
 	@FXML
 	private TextField destPathTextField;
@@ -102,17 +114,34 @@ public class ControlPanelController implements Initializable, BackupListener
 	private javafx.scene.control.MenuItem aboutMenuItem;
 	
 	/**
-	 * Handles the onAction event of the source browse button
+	 * Handles the onAction event of the source add button
 	 */
 	@FXML
-	private void handleSourceBrowseButton()
+	private void handleSourceAddButton()
 	{
 		DirectoryChooser directoryChooser = new DirectoryChooser();
 		directoryChooser.setTitle("Select source folder");
-		fileService.setSource(directoryChooser.showDialog(window));
+		File chosenDirectory = directoryChooser.showDialog(window);
+		if(chosenDirectory != null)
+		{
+			if(!sourcePaths.contains(chosenDirectory))
+				addSource(chosenDirectory);
+			else
+				Messages.error("Chosen directory is already exists in sources list", "Directory already exists");
+		}
 		
-		if(fileService.getSource() != null)
-			sourcePathTextField.setText(fileService.getSource().getAbsolutePath());
+	}
+	
+	/**
+	 * Handles the onAction event of the source remove button
+	 */
+	@FXML
+	private void handleSourceRemoveButton()
+	{
+		File selectedFile = this.sourcePathsTable.getSelectionModel().getSelectedItem();
+		
+		if(selectedFile != null)
+			deleteFile(selectedFile);		
 	}
 	
 	/**
@@ -135,24 +164,31 @@ public class ControlPanelController implements Initializable, BackupListener
 	@FXML
 	private void handlePerformBackupButton()
 	{
-		if(fileService.getSource() != null && fileService.getSource().exists())
+		String sourceNotExists = fileService.allSourcesExists();
+		
+		if(sourceNotExists == null)
 		{
-			if(fileService.getDest() != null && fileService.getSource().exists())
+			if(fileService.getSources() != null && !fileService.getSources().isEmpty())
 			{
-				if(fileService.getTime() > 0)
+				if(fileService.getDest() != null && fileService.getDest().exists())
 				{
-					setStartedButtons();
-					handleBackupStart();
-					Messages.information("Backup has been started", "Backup started");
+					if(fileService.getTime() > 0)
+					{
+						setStartedButtons();
+						handleBackupStart();
+						Messages.information("Backup has been started", "Backup started");
+					}
+					else
+						Messages.error("Set backup timing to start backup", "No timing specification found");
 				}
 				else
-					Messages.error("Set backup timing to start backup", "No timing specification found");
+					Messages.error("Set destination path to start backup", "No destination found");
 			}
 			else
-				Messages.error("Set destination path to start backup", "No destination found");
+				Messages.error("Set source path to start backup", "No source found");
 		}
 		else
-			Messages.error("Set source path to start backup", "No source found");
+			Messages.error("Source: " + sourceNotExists + " does not exists", "Source could not be found");
 	}
 	
 	/**
@@ -178,20 +214,19 @@ public class ControlPanelController implements Initializable, BackupListener
 		switch(selectedTimeOption)
 		{
 			case THREE_HOURS:
-				fileService.setTime(SleepTimes.THREE_HOURS.getSleepTime());
+				setServicesSleepTime(SleepTimes.HALF_AN_HOUR.getSleepTime());
 				break;
 			case TWO_HOURS:
-				fileService.setTime(SleepTimes.TWO_HOURS.getSleepTime());
+				setServicesSleepTime(SleepTimes.TWO_HOURS.getSleepTime());
 				break;
 			case ONE_HOUR:
-				fileService.setTime(SleepTimes.ONE_HOUR.getSleepTime());
+				setServicesSleepTime(SleepTimes.ONE_HOUR.getSleepTime());
 				break;
 			case HALF_AN_HOUR:
-				fileService.setTime(SleepTimes.HALF_AN_HOUR.getSleepTime());
+				setServicesSleepTime(SleepTimes.HALF_AN_HOUR.getSleepTime());
 				break;
 		}
 		
-		System.out.println(selectedTimeOption);
 	}
 	
 	/**
@@ -241,8 +276,23 @@ public class ControlPanelController implements Initializable, BackupListener
 		
 		addBackupListeners(this);
 		
-		if(fileService.getSource() != null)
-			sourcePathTextField.setText(fileService.getSource().getAbsolutePath());
+		sourcePathsColumn.setCellValueFactory(new PropertyValueFactory<>("path"));
+		
+		sourcePaths.addListener((ListChangeListener.Change<? extends File> change) -> 
+		{
+			while(change.next())
+			{
+				if(change.wasAdded() || change.wasUpdated())
+					sourcePathsTable.setItems(sourcePaths);
+			}
+		});
+		
+		if(fileService.getSources() != null && sourcePaths.isEmpty())
+			for(File source : fileService.getSources())
+				sourcePaths.add(source);
+			
+		if(fileService.getSources() != null && !fileService.getSources().isEmpty())
+			sourcePathsTable.setItems(sourcePaths);
 		
 		if(fileService.getDest() != null)
 			destPathTextField.setText(fileService.getDest().getAbsolutePath());
@@ -276,9 +326,11 @@ public class ControlPanelController implements Initializable, BackupListener
 	 */
 	public static void handleBackupStart()
 	{
+		backupService.setSources(fileService.getSources());
+		backupService.setDestination(fileService.getDest());
 		backupService.setSleepTime(fileService.getTime());
-		
-		if(backupService.startService(fileService.getSource(), fileService.getDest()))
+			
+		if(backupService.startService())
 			backuping = true;
 	}
 	
@@ -437,6 +489,19 @@ public class ControlPanelController implements Initializable, BackupListener
 		});
 	}
 	
+	public void deleteFile(File fileToDelete)
+	{
+		Alert alert = new Alert(AlertType.CONFIRMATION, "Are you sure you want to delete " + fileToDelete.getAbsolutePath()
+		, ButtonType.YES, ButtonType.NO);
+		alert.setHeaderText("Delete source directory?");
+		alert.setTitle("Source directory deleting");
+		alert.showAndWait();
+
+		if(alert.getResult() == ButtonType.YES)
+			removeSource(fileToDelete);
+		
+	}
+	
 	/**
 	 * Closes the control panel
 	 */
@@ -472,4 +537,23 @@ public class ControlPanelController implements Initializable, BackupListener
 		return stage;
 	}
 	
+	private void setServicesSleepTime(long sleepTime)
+	{
+		fileService.setTime(sleepTime);
+		backupService.setSleepTime(sleepTime);
+	}
+	
+	private void removeSource(File source)
+	{
+		sourcePaths.remove(source);
+		fileService.removeSource(source);
+		backupService.removeSource(source);
+	}
+	
+	private void addSource(File source)
+	{
+		 fileService.addSource(source);
+		 backupService.addSource(source);
+		 sourcePaths.add(source);
+	}
 }

@@ -8,7 +8,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -27,7 +29,7 @@ public class FileService
     private static final String TIME_KEY = "time";
     
     // Source file, destination file, and sleep time attributes
-	private File source;
+	private ArrayList<File> sources;
 	private File destination;
 	private long time;
 	
@@ -49,8 +51,15 @@ public class FileService
 			InputStream inputStream = new FileInputStream(createConfigFile());
 			properties.load(inputStream);
 			
+			sources = new ArrayList<File>();
+			
 			if(properties.containsKey(SRC_KEY))
-				source = new File(properties.getProperty(SRC_KEY));
+			{
+				List<String> sourcePaths = Arrays.asList(properties.getProperty(SRC_KEY).substring(1, properties.getProperty(SRC_KEY).length() - 1).split(", "));
+				
+				for(String path : sourcePaths)
+					sources.add(new File(path));
+			}
 			
 			if(properties.containsKey(DEST_KEY))
 				destination = new File(properties.getProperty(DEST_KEY));
@@ -101,13 +110,27 @@ public class FileService
 	 * 
 	 * @param source source file to set
 	 */
-	public void setSource(File source)
+	public void addSource(File source)
 	{
 		if(source != null)
 		{
-			properties.setProperty(SRC_KEY, source.getAbsolutePath());
+			this.sources.add(source);
+			properties.setProperty(SRC_KEY, sources.toString());
 			savePropertiesToConfigFile();
-			this.source = source;
+		}
+	}
+	
+	public void removeSource(File source)
+	{
+		if(source != null)
+		{
+			this.sources.remove(source);
+			if(!properties.contains("\\"))
+				properties.remove(SRC_KEY);
+			else
+				properties.setProperty(SRC_KEY, sources.toString());
+			savePropertiesToConfigFile();
+
 		}
 	}
 	
@@ -116,9 +139,9 @@ public class FileService
 	 * 
 	 * @return the current source file
 	 */
-	public File getSource()
+	public ArrayList<File> getSources()
 	{
-		return this.source;
+		return this.sources;
 	}
 	
 	/**
@@ -166,6 +189,24 @@ public class FileService
 	public long getTime()
 	{
 		return this.time;
+	}
+	
+	public String allSourcesExists()
+	{
+		String sourceNotExists = null;
+		
+		for(File source : sources)
+		{		
+			if(!source.exists())
+			{
+				sourceNotExists = source.getAbsolutePath();
+				break;
+			}
+				
+		}
+		
+		return sourceNotExists;
+
 	}
 	
 }
