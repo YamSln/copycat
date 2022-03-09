@@ -1,4 +1,4 @@
-### copycat (Underline)
+# copycat
 
 Backup schedudling desktop app developed with [JavaFX](https://github.com/openjdk/jfx)
 
